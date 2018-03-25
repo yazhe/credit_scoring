@@ -124,9 +124,25 @@ def data_transform(data):
     return data
 
 '''
+Train data preparation
+Input: train dataset file name(original dataset)
+Output: train_x, train_y (transformed data)
+'''
+def data_preparation(data_fname):
+    data = pd.read_csv(data_fname, sep=',', index_col=0)
+    print(data.shape, " data dimention")
+    data = data_transform(data)
+    print(data.shape, " transformed data dimention")
+
+    train_y = data['SeriousDlqin2yrs']
+    train_x = data.drop(['SeriousDlqin2yrs'], axis=1)
+    return train_x, train_y
+
+
+'''
 K-fold cross validation to select the best model hyper-parameters
-Input: training data features, traing data labels
-Output: print the best training score, and best hyper-parameter to console 
+Input: training data, k
+Output: return the best training parameters (dictionary)
 '''
 def model_selection(train_x, train_y, k):
     model = xgb.XGBClassifier(objective='binary:logistic', eval_metric='auc', silent=0, scale_pos_weight=13)
@@ -143,8 +159,27 @@ def model_selection(train_x, train_y, k):
     gs.fit(train_x, train_y)
     print("best train score:")
     print(gs.best_score_)
-    print("best xgboost parameters: ")
-    print(gs.best_params_)
+    # print("best xgboost parameters: ")
+    # print(gs.best_params_)
+    return gs.best_params_
+
+
+'''
+Model training
+Input: train data, model parameters, model file name (pickle)
+Output: a trained model write to a pickle file
+'''
+def model_training(train_x, train_y, params, model_fname):
+    model = xgb.XGBClassifier(**params)
+    model.fit(train_x, train_y)
+    print("finished training")
+    # analyze features
+    name = np.array(train_x.columns)
+    features = pd.DataFrame({'feature': name, 'score': model.feature_importances_})
+    print(features.sort_values(by=['score'], ascending=False))
+    xgb.plot_importance(model)  # show the importance of the features
+    plt.show()
+    joblib.dump(model, './data/model_xgb_current_best.plk')
 
 '''
 Use a pretrianed model to generate testing results
@@ -167,34 +202,29 @@ def model_testing(test_fname, model_fname, rlt_fname):
     dt.to_csv(rlt_fname, index=True, index_label='Id')
 
 def main():
-    # read training data
-    data = pd.read_csv("./data/cs-training.csv", sep=',', index_col=0)
-    print(data.shape, " data dimention")
-    data = data_transform(data)
-    print(data.shape, " transformed data dimention")
+    # some config parameters
+    k_fold = 5
+    training_fname = './data/cs-training.csv'
+    testing_fname  = './data/cs-test.csv'
+    model_fname  = './data/model_xgb_current_best.plk'
+    result_fname = './data/test_xgb_current_best.csv'
 
-    train_y = data['SeriousDlqin2yrs']
-    train_x = data.drop(['SeriousDlqin2yrs'], axis=1)
+    # read training data
+    train_x, train_y = data_preparation(training_fname)
 
     # find the best parameter (run this part first to get the best hyper parameter)
-    # model_selection(train_x, train_y, 5)
+    # params = model_selection(train_x, train_y, k_fold)
+    # print(params)
 
     # train a model with the best parameters
-    model = xgb.XGBClassifier(objective='binary:logistic', eval_metric='auc', silent=1, scale_pos_weight=13, eta=0.3,
-                               max_depth=8, min_child_weight=60, n_estimators=26, subsample=0.8, colsample_bytree=0.4,
-                               max_delta_step=1.79, gamma=0)
-    model.fit(train_x,train_y)
-    print("finished training")
-    # analyze features
-    name = np.array(train_x.columns)
-    features = pd.DataFrame({'feature':name, 'score':model.feature_importances_})
-    print(features.sort_values(by=['score'], ascending=False))
-    xgb.plot_importance(model)  # show the importance of the features
-    plt.show()
-    joblib.dump(model, './data/model_xgb_current_best.plk')
+    # current best parameters
+    params = {'objective':'binary:logistic', 'eval_metric':'auc', 'silent':1, 'scale_pos_weight':13,
+              'eta':0.3, 'max_depth':8, 'min_child_weight':60, 'n_estimators':26, 'subsample':0.8,
+              'colsample_bytree':0.4, 'max_delta_step':1.79 }
+    model_training(train_x, train_y, params, model_fname)
 
     # generating test result
-    model_testing('./data/cs-test.csv', './data/model_xgb_current_best.plk', './data/test_xgb_current_best.csv')
+    model_testing(testing_fname, model_fname, result_fname)
 
 
 if __name__ == "__main__":
