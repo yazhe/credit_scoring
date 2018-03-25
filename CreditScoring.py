@@ -8,14 +8,20 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.externals import joblib
 import matplotlib.pyplot as plt
 
-
-# log transformation of a column
+'''
+Log transformation of a column
+Inpu: a data frame, original column name， transformed new column name
+Output: data frame with new transpormed dataframe
+'''
 def log_transform(data, column_name, log_column_name):
     data[log_column_name] = data[column_name].apply(np.log)
     data.loc[data[log_column_name] == -np.inf, column_name] = 0
     return data
-
-# Feature extraction
+'''
+Feature extraction (Manully explore possible features)
+Input: a data frame
+Output: a new data frame with selected features for the prediction task
+'''
 def data_transform(data):
     # data['OldAge'] = data['age'] > 65
     # data['OldAge'] = data['OldAge'].astype(int)  # identify the person reached retirement
@@ -117,18 +123,21 @@ def data_transform(data):
                       'TotalPastDue', 'Debt', 'RemainingIncome'], axis=1)
     return data
 
-
-# k-fold cross validation to select the best model parameters
+'''
+K-fold cross validation to select the best model hyper-parameters
+Input: training data features, traing data labels
+Output: print the best training score, and best hyper-parameter to console 
+'''
 def model_selection(train_x, train_y, k):
     model = xgb.XGBClassifier(objective='binary:logistic', eval_metric='auc', silent=0, scale_pos_weight=13)
     param_dic = {
-        'learning_rate': [0.03],
-        'max_depth': [7,8,9],
-        'min_child_weight': [50,51,53],
-        'n_estimators': [50],
-        'subsample': [0.9],
-        'colsample_bytree': [0.5],
-        'max_delta_step': [1.5,1.8,2]
+        'learning_rate': [0.01, 0.1, 0.2, 0.3],
+        'max_depth': [3, 8, 10],
+        'min_child_weight': [40,50, 55, 60],
+        'n_estimators': [20, 50, 80, 100],
+        'subsample': [0.4, 0.5, 0.8, 1],
+        'colsample_bytree': [0.4, 0.5, 0.8],
+        'max_delta_step': [1.5, 1.8,  2]
     }
     gs = GridSearchCV(model, param_grid=param_dic, cv=k, n_jobs=-1)
     gs.fit(train_x, train_y)
@@ -137,6 +146,11 @@ def model_selection(train_x, train_y, k):
     print("best xgboost parameters: ")
     print(gs.best_params_)
 
+'''
+Use a pretrianed model to generate testing results
+Input: test data file name, pickle file name of the pretrained model, test result data file name
+Output: test result file with the required format for Kaggle submission
+'''
 def model_testing(test_fname, model_fname, rlt_fname):
     # read model and testing data
     model = joblib.load(model_fname)
@@ -162,11 +176,11 @@ def main():
     train_y = data['SeriousDlqin2yrs']
     train_x = data.drop(['SeriousDlqin2yrs'], axis=1)
 
-    # find the best parameter
+    # find the best parameter (run this part first to get the best hyper parameter)
     # model_selection(train_x, train_y, 5)
 
     # train a model with the best parameters
-    model = xgb.XGBClassifier(objective='binary:logistic', eval_metric='auc', silent=1, scale_pos_weight=13, eta=0.25,
+    model = xgb.XGBClassifier(objective='binary:logistic', eval_metric='auc', silent=1, scale_pos_weight=13, eta=0.3,
                                max_depth=8, min_child_weight=60, n_estimators=26, subsample=0.8, colsample_bytree=0.4,
                                max_delta_step=1.79, gamma=0)
     model.fit(train_x,train_y)
@@ -179,8 +193,9 @@ def main():
     plt.show()
     joblib.dump(model, './data/model_xgb_current_best.plk')
 
-    # generating test results
+    # generating test result
     model_testing('./data/cs-test.csv', './data/model_xgb_current_best.plk', './data/test_xgb_current_best.csv')
+
 
 if __name__ == "__main__":
     main()
